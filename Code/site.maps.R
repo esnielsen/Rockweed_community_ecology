@@ -15,7 +15,7 @@ library(maps)
 library(dplyr)
 
 # read raw data
-photo.lay <- read_excel("C:/Users/erica.nielsen/Desktop/Synz/MARINe/LTM_layer_data/photolayerdata_20231218.xlsx", 
+photo.lay <- read_excel("~/photolayerdata_20231218.xlsx", 
                         sheet = "photolayerraw_download")
 
 #get number years sampled
