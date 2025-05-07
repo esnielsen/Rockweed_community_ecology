@@ -1,0 +1,20 @@
+MARINe Photoplot Layering App: Scoring Guidelines
+1.	See photoplot_app_instructions.pdf for how to enter data using app 
+2.	The app records data by column, so always start at the upper left most point and work down. Tell the recorder when you begin a new column.
+3.	Record the species code for the top-most organism/substrate (see rules below for weedy species and cases where there are >2 layers).
+4.	Record the species code for the bottom-most organism/substrate. If there is only a single layer (e.g. "Balanus"), or the same species occurs in the top-most and bottom-most layers (e.g. "Fucus" canopy over "Fucus" holdfast), then you will have “NONE” as your bottom layer. 
+5.	Only record rock under a species if you can actually see it. For example Fucus on rock is ok (as long as you don’t hit a holdfast), but Tetraclita on rock is just recorded as “TETRUB on NONE.”
+6.	If there are >2 layers, record only the uppermost BIOLOGICAL layer (not ephemeral) and lowermost TARGET species; if no target species are present, record the uppermost and lowermost BIOLOGICAL layer. Some examples to illustrate how to record data for points with >2 layers:
+a.	Fucus on Chthamalus on Mytilus, record top layer=Fucus and bottom layer=Mytilus. 
+b.	Soranthera on Neorhodomela on sand, record top layer=Soranthera, bottom layer=Neorhodomela)
+c.	Dead Chthamalus on Semibalanus on Mytilus, record top layer=Semibalanus, bottom layer=Mytilus. Dead barnacles are considered “substrate”, see #8.
+d.	Ulva on Fucus on Balanus, record top layer=Fucus, bottom layer=Balanus.
+e.	Gastroclonium over Endocladia over Chthamalus, record top layer=Gastroclonium, bottom layer=Chthamalus.
+7.	Do not score mobile invertebrates (e.g. Tegula, Mexacanthina). Instead, score the organism/substrate underneath them.
+8.	Score sedentary motile invertebrates (any invert that can’t be easily moved) occurring under a point as one of the following core categories: chiton, Lottia gigantea, limpet, Pisaster ochraceus, or other invertebrate. 
+a.	Optional: ID non-core sedentary invertebrates to species (e.g. S. purpuratus) using designated codes
+9.	Score bleached crustose corallines (appearing white) as “crustose corallines”, not “rock”. Bleached crustose corallines may still be alive, so assume they are live and score as such.
+10.	Score obviously dead barnacle tests, dead mollusk shells, and other non-living substrates that are not “rock”, “sand” or “tar” as “other substrates”. 
+a.	Optional: score each dead barnacle/mollusk species separately in the field using designated codes. 
+11.	Epoxy corner markers and bolts should be scored as “rock”.
+12.	When sand is present under a point in the photo, if you can positively identify what is under the sand, then score the underlying core species or substrate; otherwise score as “sand”. This means that “sand” will be scored whenever sand thickness is greater than just a thin layer with patches of rock or some core species showing through.
