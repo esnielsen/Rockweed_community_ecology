@@ -3,7 +3,8 @@
 Data and code used in the study to assess the foundational role of three rockweed species within California to inform restoration. This work is part of the Anthony LaFetra Research Fellowship with the Point Conception Institute and The Nature Conservancy. The repository has the following folders:
 
 **Data**
-Data obtained from [MARINe](https://marine.ucsc.edu/index.html). 
+
+Data obtained from [MARINe](https://marine.ucsc.edu/index.html). The sampling protocol is available in this folder. The raw data is within a google drive folder, available upon request. 
 
 
 **Code**
