@@ -8,7 +8,7 @@ Data obtained from [MARINe](https://marine.ucsc.edu/index.html).
 
 **Code**
 1) site.maps.R = Code used to create Fig 1 with the sample sites per rockweed species.
-2) XX = Code to get average percent cover per understory species, and calculate + plot Shannon diversity expotential, and species richness from plots per rockweed species.
+2) biodiv.indices.R = Code to get average percent cover per understory species, and calculate + plot Shannon diversity expotential, and species richness from plots per rockweed species.
 3) spp.pres.corrs.R = Code to get species presence/absence across all sites and calculate Jaccard similarity between species presences of rockweeds and understory species (to determine overlap in distributions)
 4) spp.cov.corr.R = Code to create Fig. 2, displaying regressions from understory species which have significant relationships in their % cover to the rockweed canopy % cover.
 5) SR.SD.glms.R = Code to run the generalized linear models to test the effect of rockweed canopy cover on understory cover, richness and diversity. 
