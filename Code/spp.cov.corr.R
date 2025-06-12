@@ -13,20 +13,15 @@ library(pglm)
 library(lme4)
 library(glmmTMB)
 library(DHARMa)
-library(Polychrome)
-library(pals)
-library(patchwork)
 
-# read raw data
 photo.lay <- read_excel("C:/Users/erica.nielsen/Desktop/Synz/MARINe/LTM_layer_data/photolayerdata_20231218.xlsx", 
                         sheet = "photolayerraw_download")
 
-# filter to only living organisms in both top and bottom layer
 photo.all <- filter(photo.lay, !top_layer %in% c("UNIDEN", "OTHSUB", "DEABAL", "DEACHT", "DEACRA", "DEADCB", "DEAINV", "DEAMCA", "DEAMTR", "DEASBB", "DEASEM", "DEATET"))
 photo.all <- filter(photo.all, !bottom_layer %in% c("UNIDEN", "DEABAL", "DEACHT", "DEACRA", "DEADCB", "DEAINV", "DEAMCA", "DEAMTR", "DEASBB", "DEASEM", "DEATET", "NONE", "ROCK", "SAND"))
 
-# filter to RW spp
-photo.all <-filter(photo.all, target_assemblage %in%  c("silvetia", "fucus", "pelvetiopsis"))
+
+photo.all <-filter(photo.all, target_assemblage %in%  c("silvetia", "fucus", "pelvetiopsis", "hesperophycus"))
 
 # We have to swap top_layer record with bottom_layer 'NONE' values so we don't lose understory data
 photo.all$bottom_layer[photo.all$bottom_layer == 'NONE'] <- photo.all$top_layer[photo.all$bottom_layer == 'NONE']
@@ -84,15 +79,23 @@ plot_spp_cov <- plot_df_list %>% reduce(full_join, by='site_quad_sp')
 plot_spp_cov <-filter(plot_spp_cov, top_layer %in%  c("SILCOM", "PELLIM", "FUCGAR"))
 
 
-##### create plot of each understory spp with signif interaction (% cov regressed to % cov of RW layer)
+##### create plot of ea. spp signif interactions
+
+# Required libraries
+library(ggplot2)
+library(Polychrome)
+library(pals)
+library(dplyr)
+library(broom)
+library(patchwork)
 
 # Set colors
 mypalette <- createPalette(75, c("#ff0000", "#010101", "#00ff00", "#0000ff"))
 names(mypalette) <- sort(unique(plot_spp_cov$bottom_layer))
 
-# Define function to fit linear model and tidy it
+# Define function to fit linear model and tidy results
 fit_and_tidy_model <- function(data) {
-  model <- glm(botcov2 ~ RW_cov, family = beta_family(link = "logit"), data = data) 
+  model <- lm(bot_cov ~ RW_cov, data = data)
   tidy_model <- broom::tidy(model)
   return(tidy_model)
 }
@@ -100,23 +103,32 @@ fit_and_tidy_model <- function(data) {
 # Function to create plot for each species
 create_species_plot <- function(df, species_name) {
   df <- df %>%
-    mutate(botcov2 = replace(bot_cov, bot_cov == 1, 0.99),
-           marine_common_year.x = as.factor(marine_common_year.x))
+    mutate(marine_common_year.x = as.factor(marine_common_year.x))
   
-  # Fit models and filter significant ones
+  # Fit models and collect p-values
   fitted_models <- df %>%
     group_by(bottom_layer) %>%
     do(model = fit_and_tidy_model(.))
   
-  sig_models <- fitted_models %>%
-    filter(model$p.value[2] < 0.05)
+  # Adjust p-values using Benjamini-Hochberg correction
+  fitted_models <- fitted_models %>%
+    mutate(adj_p_value = p.adjust(model$p.value[2], method = "BH"))
   
+  # Filter for significant adjusted p-values
+  sig_models <- fitted_models %>%
+    filter(adj_p_value < 0.05)  # Use adjusted p-value threshold
+  
+  # Filter data to only significant relationships
   filt_data <- df %>%
     filter(bottom_layer %in% sig_models$bottom_layer)
   
+  if (nrow(filt_data) == 0) {
+    return(NULL)  # Return NULL if no significant relationships
+  }
+  
   # Create ggplot
-  plot <- ggplot(filt_data, aes(x = RW_cov, y = botcov2, color = bottom_layer)) +
-    geom_smooth(method = "lm", se = FALSE) +
+  plot <- ggplot(filt_data, aes(x = RW_cov, y = bot_cov, color = bottom_layer)) +
+    geom_smooth(method = "lm", se = FALSE) +  # Only smooth lines
     labs(x = "Rockweed cover", y = "Understory cover", title = species_name) +
     scale_color_manual(values = mypalette) +
     coord_cartesian(ylim = c(0, 0.35)) +  # Set fixed y-axis limits
@@ -130,21 +142,19 @@ create_species_plot <- function(df, species_name) {
   return(plot)
 }
 
-# Combine data for shared legend
-sil_data <- plot_spp_cov %>% filter(top_layer == 'SILCOM') %>% mutate(species = "S. compressa")
-pel_data <- plot_spp_cov %>% filter(top_layer == 'PELLIM') %>% mutate(species = "P. limitata")
-fuc_data <- plot_spp_cov %>% filter(top_layer == 'FUCGAR') %>% mutate(species = "F. distichus")
+# Prepare data for species-specific filtering
+sil_data <- plot_spp_cov %>% filter(top_layer == 'SILCOM', bottom_layer != "NONE") %>% mutate(species = "S. compressa")
+pel_data <- plot_spp_cov %>% filter(top_layer == 'PELLIM', bottom_layer != "NONE") %>% mutate(species = "P. limitata")
+fuc_data <- plot_spp_cov %>% filter(top_layer == 'FUCGAR', bottom_layer != "NONE") %>% mutate(species = "F. distichus")
 
-# Combine all species data into one dataframe
-combined_data <- bind_rows(sil_data, pel_data, fuc_data)
-
-# Create individual plots
+# Create individual plots, only including plots with significant relationships
 sil_plot <- create_species_plot(sil_data, "S. compressa")
 pel_plot <- create_species_plot(pel_data, "P. limitata")
 fuc_plot <- create_species_plot(fuc_data, "F. distichus")
 
-# Combine plots into a single figure with a shared legend
-combined_plot <- (sil_plot | fuc_plot | pel_plot) +
+# Combine plots into a single figure, excluding NULL plots
+plots <- list(sil_plot, fuc_plot, pel_plot) %>% compact()
+combined_plot <- wrap_plots(plots) +
   plot_layout(guides = "collect") &
   theme(
     legend.position = "bottom",
@@ -155,10 +165,5 @@ combined_plot <- (sil_plot | fuc_plot | pel_plot) +
 # Adjust legend to have multiple rows
 combined_plot <- combined_plot & guides(color = guide_legend(nrow = 3))
 
-# Add a title to the combined plot
-combined_plot <- combined_plot + 
-  plot_annotation(title = "Species-specific Understory Cover by Rockweed Cover")
-
 # Save the combined plot to a PDF
-ggsave("combined_species_intxn_Yaxes_F.dist.pdf", combined_plot, width = 12, height = 8)
-
+ggsave("combined_species_intxn_lm.png", combined_plot, width = 12, height = 8)
