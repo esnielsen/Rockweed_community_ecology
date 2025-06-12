@@ -17,456 +17,261 @@ library(data.table)
 library(tibble)
 library(ggrepel)
 
-# read dat
+
 photo.lay <- read_excel("C:/Users/erica.nielsen/Desktop/Synz/MARINe/LTM_layer_data/photolayerdata_20231218.xlsx", 
-    sheet = "photolayerraw_download")
-
-# filter to only include sites with at least 7 years sampled
-
-#get number years sampled
-phot_count <- photo.lay %>%                           
- group_by(marine_site_name) %>%
- dplyr::summarise(count = n_distinct(marine_common_year))
-
-photo.yr<-merge(photo.lay,  phot_count, by.x = "marine_site_name", by.y = "marine_site_name")
-
-# filtering to include at least 7 years of sampling, calling 'NorCal' because only those sites pass filters
-photo.NorCal <- photo.yr %>% filter(count > 7)
-
+                        sheet = "photolayerraw_download")
 # We have to swap top_layer record with bottom_layer 'NONE' values so we don't lose understory data
-photo.NorCal$bottom_layer[photo.NorCal$bottom_layer == 'NONE'] <- photo.NorCal$top_layer[photo.NorCal$bottom_layer == 'NONE']
+photo.lay$bottom_layer[photo.lay$bottom_layer == 'NONE'] <- photo.lay$top_layer[photo.lay$bottom_layer == 'NONE']
 
 # edit again to say if top = bottom, call top layer as "NONE"
-photo.NorCal <- photo.NorCal  %>% mutate(top_layer = if_else(bottom_layer==top_layer, 'NONE', top_layer))
+photo.lay <- photo.lay  %>% mutate(top_layer = if_else(bottom_layer==top_layer, 'NONE', top_layer))
 
 #filter to remove non-living species in top layer
-photo.NorCal <- filter(photo.NorCal, !top_layer %in% c("UNIDEN", "ROCK", "TAR", "SAND", "OTHSUB", "DEABAL", "DEACHT", "DEACRA", "DEADCB", "DEAINV", "DEAMCA", "DEAMTR", "DEASBB", "DEASEM", "DEATET"))
+photo.lay <- filter(photo.lay, !top_layer %in% c("UNIDEN", "ROCK", "TAR", "SAND", "OTHSUB", "DEABAL", "DEACHT", "DEACRA", "DEADCB", "DEAINV", "DEAMCA", "DEAMTR", "DEASBB", "DEASEM", "DEATET"))
 
-# just filter unidentified spp in bottom layer
-photo.NorCal <- filter(photo.NorCal, !bottom_layer %in% c("UNIDEN"))
+# remove non-living spp in bottom layer
+photo.lay <- filter(photo.lay, !bottom_layer %in% c("UNIDEN",  "ROCK", "TAR", "SAND", "OTHSUB", "DEABAL", "DEACHT", "DEACRA", "DEADCB", "DEAINV", "DEAMCA", "DEAMTR", "DEASBB", "DEASEM", "DEATET"))
 
 # Filter again to only include target assemblages = RW
-photo.NorCal <-filter(photo.NorCal, target_assemblage %in%  c("silvetia", "fucus", "pelvetiopsis", "hesperophycus"))
+photo.lay <-filter(photo.lay, target_assemblage %in%  c("silvetia", "fucus", "pelvetiopsis"))
 
 
 # calculate per cov per quadrat (with counts that we divide by 100)
-top_per_cov<-photo.NorCal %>%
-  group_by(ltm_latitude, ltm_longitude, marine_site_name, marine_common_year, season_name, target_assemblage, quadrat_code) %>%
+top_per_cov<-photo.lay %>%
+  group_by(ltm_latitude, ltm_longitude, marine_site_name, georegion, marine_common_year, season_name, target_assemblage, quadrat_code) %>%
   dplyr::count(top_layer)
 top_per_cov$n <- as.numeric(top_per_cov$n ) / 100
 
 # do again for bottom layer spp
-bot_per_cov<-photo.NorCal %>%
-  group_by(ltm_latitude, ltm_longitude, marine_site_name, marine_common_year, season_name, target_assemblage, quadrat_code, top_layer) %>%
+bot_per_cov<-photo.lay %>%
+  group_by(ltm_latitude, ltm_longitude, marine_site_name, georegion, marine_common_year, season_name, target_assemblage, quadrat_code, top_layer) %>%
   dplyr::count(bottom_layer)
 bot_per_cov$n <- as.numeric(bot_per_cov$n ) / 100
 
-## filter to plots with > 70% change over the years
-# filt top_cov to only include RW of interest
-RW_top_cov_plot <-filter(top_per_cov, top_layer %in%  c("SILHES", "SILCOM", "PELLIM", "PELHYB", "FUCGAR", "HESCAL"))
-
-# get diffs btwn the highest and lowest % covs per site/plot
-RW_cov_diff <- RW_top_cov_plot %>% 
-    group_by(marine_site_name,quadrat_code, target_assemblage, top_layer) %>%
-    summarise(Diff = n[which.max(n)] - n[which.min(n)])
-
-# sort to get sites/plot per spp w highest diffs
-d <- data.table(RW_cov_diff, key="Diff")
-d2 <- d[, head(.SD, 3), by=Diff]
-View(d2)
-
-## READ:
-# I then looked at the bottom of the 'd2' dataframe and took the 5 sites per spp with highest difference in % cov over time and copied those into an excel sheet titled 'top_cov_diff_plots
-
-top_cov_diff_plots <- read_excel("C:/Users/erica.nielsen/Desktop/Synz/MARINe/PCI_MARINe_synth/Fucoids/layer_DSR_analyses/top_cov_diff_plots.xlsx")
-
-# remove white space of site names for join later
-bot_per_cov$marine_site_name <- gsub("\\s+", "_", bot_per_cov$marine_site_name)
-top_per_cov$marine_site_name <- gsub("\\s+", "_", top_per_cov$marine_site_name)
-
-# filter bot_cov by plots of interest
-bot_diff_plots <- merge(bot_per_cov, top_cov_diff_plots)
-bot_diff_plots <- bot_diff_plots %>% 
-       rename("bot_cov" = "n")
-
 # add top_layer % cov to the DF
-top_diff_plots <- merge(top_per_cov, top_cov_diff_plots)
-top_diff_plots <- top_diff_plots %>% 
-       rename("top_cov" = "n")
-diff_plots_DF <- inner_join(bot_diff_plots, top_diff_plots, relationship = "many-to-many")
+top_bot_plots <- merge(top_per_cov, bot_per_cov)
+top_bot_plots <- top_bot_plots %>% 
+  rename("top_cov" = "n")
 
-#make new column to group RW cov into high/low (above/below 50% cov)
-diff_plots_DF <- diff_plots_DF %>%
-      mutate(cov_group = case_when(top_cov>=0.5~"high_cover",
-                                     top_cov<0.5~"low_cover"))
+#filter to RW top cov
+RW_top_cov_plot <-filter(top_bot_plots, top_layer %in%  c("SILCOM", "PELLIM", "FUCGAR"))
+
 
 # filter to each RW spp
-sil_diff_plots <-filter(diff_plots_DF, top_layer %in%  "SILCOM")
+sil_diff_plots <-filter(RW_top_cov_plot, top_layer %in%  "SILCOM")
 sil_diff_plots <-filter(sil_diff_plots, target_assemblage %in% "silvetia")
-                                                                  
-pel_diff_plots <-filter(diff_plots_DF, top_layer %in%  "PELLIM")
+
+pel_diff_plots <-filter(RW_top_cov_plot, top_layer %in%  "PELLIM")
 pel_diff_plots <-filter(pel_diff_plots, target_assemblage %in% "pelvetiopsis")
 
-fuc_diff_plots <-filter(diff_plots_DF, top_layer %in% "FUCGAR")
+fuc_diff_plots <-filter(RW_top_cov_plot, top_layer %in% "FUCGAR")
 fuc_diff_plots <-filter(fuc_diff_plots, target_assemblage %in%  "fucus")
+ 
+# filter to spp with > 5% cover avg per RW (bc then we are looking at how main players in community change w/RW)
 
+bot_spp_cov_wide.table <- read.csv("C:/Users/erica.nielsen/Desktop/Synz/MARINe/PCI_MARINe_synth/Fucoids/layer_DSR_analyses/bot_spp_cov_wide.table.csv")
+
+# sil filt
+sil_filt <- bot_spp_cov_wide.table %>%
+  filter(S..compressa > 4) %>%
+  select(1)  # Selects the first column
+# filter wide DF by filt DF
+sil_diff_filt <- sil_diff_plots %>%
+  filter(bottom_layer %in% sil_filt$species_code)
+
+# fuc filt
+fuc_filt <- bot_spp_cov_wide.table %>%
+  filter(F..garderni > 4) %>%
+  select(1)  # Selects the first column
+fuc_diff_filt <- fuc_diff_plots %>%
+  filter(bottom_layer %in% fuc_filt$species_code)
+
+# pel filt
+pel_filt <- bot_spp_cov_wide.table %>%
+  filter(P..limitata > 4) %>%
+  select(1)  # Selects the first column
+pel_diff_filt <- pel_diff_plots %>%
+  filter(bottom_layer %in% pel_filt$species_code)
 
 #make wide
-
-sil_diff_plot_w <- sil_diff_plots %>%
+sil_diff_plot_w <- sil_diff_filt %>%
   pivot_wider(names_from = bottom_layer, values_from = bot_cov)
 #change NAs to zeros
 sil_diff_plot_w <- sil_diff_plot_w %>% replace(is.na(.), 0)
 
 # do for other spp
 
-pel_diff_plot_w <- pel_diff_plots %>%
+pel_diff_plot_w <- pel_diff_filt %>%
   pivot_wider(names_from = bottom_layer, values_from = bot_cov)
 pel_diff_plot_w <- pel_diff_plot_w %>% replace(is.na(.), 0)
 
-fuc_diff_plot_w <- fuc_diff_plots %>%
+fuc_diff_plot_w <- fuc_diff_filt %>%
   pivot_wider(names_from = bottom_layer, values_from = bot_cov)
 fuc_diff_plot_w <- fuc_diff_plot_w %>% replace(is.na(.), 0)
 
-# 
-nmds_sil <- metaMDS(comm = sil_diff_plot_w[ , 12:51],  # Define the community data 
-                        distance = "bray",       # Specify a bray-curtis distance
-                        try = 100)               # Number of iterations
+
+
+#### Nmds with all points
+
+# Select only species cover columns (columns 11-21)
+species_data <- sil_diff_filt_w[, 11:21]
+
+# Perform NMDS
+nmds_sil <- metaMDS(comm = sil_diff_filt_w[ , 11:21],  # Define the community data 
+                    distance = "bray",       # Specify a bray-curtis distance
+                    try = 100)               # Number of iterations
 
 #get 'stress', lower is better (<0.05 means good data representation)
 nmds_sil$stress 
 
-#get coordinates
-nmds_sil$points %>% head()
-
-#save coords
-nmds_sil.pts <- data.frame(nmds_sil$points)
-
+# Get NMDS coordinates
 #extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
-sil.scores = as.data.frame(scores(nmds_sil)$sites)
+nmds_scores = as.data.frame(scores(nmds_sil)$sites)
 
 #add columns to data frame 
-sil.scores$RW_cover = sil_diff_plot_w$top_cov
-sil.scores$Year = sil_diff_plot_w$marine_common_year
-sil.scores$Site = sil_diff_plot_w$marine_site_name
+nmds_scores$RW_cover = sil_diff_filt_w$top_cov
+nmds_scores$Region = sil_diff_filt_w$georegion
+nmds_scores$Site = sil_diff_filt_w$marine_site_name
 
+# Fit species vectors
+species_fit <- envfit(nmds_sil, species_data)
 
-### Get metadata ready
-sil.env <- sil.scores[, c("RW_cover", "Site")]
+species_scores <- as.data.frame(scores(species_fit, display = "vectors"))
+species_scores$species <- rownames(species_scores)
 
-sil.envfit <- envfit(nmds_sil, sil.env, permutations = 999)
-
-site.scrs <- as.data.frame(scores(nmds_sil, display = "sites")) #save NMDS results into dataframe
-site.scrs <- cbind(site.scrs, Site = sil.scores$Site) #add site names as variable if you want to display on plot
-
-head(site.scrs)
-
-### Get spp data ready
-sil<-sil_diff_plot_w[ , 12:51]
-sil.spp.fit <- envfit(nmds_sil, sil, permutations = 999) # this fits species vectors
-
-  
-spp.scrs <- as.data.frame(scores(sil.spp.fit, display = "vectors")) #save species intrinsic values into dataframe
-spp.scrs <- cbind(spp.scrs, Species = rownames(spp.scrs)) #add species names to dataframe
-spp.scrs <- cbind(spp.scrs, pval = sil.spp.fit$vectors$pvals) #add pvalues to dataframe so you can select species which are significant
-#spp.scrs<- cbind(spp.scrs, abrev = abbreviate(spp.scrs$Species, minlength = 6)) #abbreviate species names
-sig.spp.scrs <- subset(spp.scrs, pval<=0.05) #subset data to show species significant at 0.05
-
-head(spp.scrs)
-
-### make env dataset
-env.scores <- as.data.frame(scores(sil.envfit, display = "vectors")) #extracts relevant scores from envifit
-env.scores <- cbind(env.scores, env.variables = rownames(env.scores)) #and then gives them their names
-
-env.scores <- cbind(env.scores, pval = sil.envfit$vectors$pvals) # add pvalues to dataframe
-sig.env.scrs <- subset(env.scores, pval<=0.05) #subset data to show variables significant at 0.05
-
-head(sig.env.scrs)
-
-### Get spp data ready
-sil<-sil_diff_plot_w[ , 12:51]
-sil.spp.fit <- envfit(nmds_sil, sil, permutations = 999) # this fits species vectors
-
-
-### make env dataset
-env.scores <- as.data.frame(scores(sil.envfit, display = "vectors")) #extracts relevant scores from envifit
-env.scores <- cbind(env.scores, env.variables = rownames(env.scores)) #and then gives them their names
-
-env.scores <- cbind(env.scores, pval = sil.envfit$vectors$pvals) # add pvalues to dataframe
-sig.env.scrs <- subset(env.scores, pval<=0.05) #subset data to show variables significant at 0.05
-
-### make spp dataset
-ord <- metaMDS(sil)
-ord
-
-species.scores <- as.data.frame(scores(ord, "species"))
-species.scores$Species <- rownames(species.scores)
-
-# Get spp taxonomy 
-bot_spp_groups <- read_excel("C:/Users/erica.nielsen/Desktop/Synz/MARINe/PCI_MARINe_synth/Fucoids/layer_DSR_analyses/bot_spp_groups.xlsx")
-bot_spp_groups <- na.omit(bot_spp_groups)
-
-# Merge species scores with taxa information
-botgroup <-bot_spp_groups %>% remove_rownames %>% column_to_rownames(var="species")
-spps_score_group <- merge(species.scores, botgroup, by = "row.names")  # Ensure correct merge key
-
-# Extract NMDS site and species scores
-site.scores <- as.data.frame(scores(ord, "sites"))
-site.scores$Site <- rownames(site.scores)
-
-species.scores <- as.data.frame(scores(ord, "species"))
-species.scores$Species <- rownames(species.scores)
-
-# Merge species scores with taxa information
-spps_score_group <- merge(species.scores, botgroup, by = "row.names") 
-
-### Create plot
-
-# Define custom taxa colors
-okabe <- c("tan4", "mediumseagreen","purple4", "darkolivegreen", "red3", "grey30" )
-names(okabe) <- sort(unique(bot_spp_groups$taxa))  # Assign colors to taxa names
-
-# Add RW_cover to site scores
-site.scores$RW_cover <- sil.env$RW_cover
-
-# Generate contour data for RW_cover using kde2d
-kde <- with(site.scores, MASS::kde2d(NMDS1, NMDS2, h = c(0.5, 0.5), n = 100))  # Adjust 'h' for smoothing
-contour_data <- data.frame(expand.grid(x = kde$x, y = kde$y), z = as.vector(kde$z))
-
-# Generate plot
-# Plot NMDS with ggplot
-sil.nmds.plot <- ggplot() +
-  # Contour lines for RW_cover
-  geom_contour_filled(data = contour_data, aes(x = x, y = y, z = z), alpha = 0.5) +
-  scale_fill_viridis_d(name = "RW Cover", option = "plasma", direction = -1) + # Plasma color scale for contours
-  
-  # Add NMDS site points (grey, with transparency)
-  geom_point(data = site.scores, aes(x = NMDS1, y = NMDS2), color = "grey", alpha = 0.6, size = 3) +
-  
-  # New color scale for taxa
-  ggnewscale::new_scale_color() +
-  
-  # Add species labels (bold & colored by taxa)
-  geom_text_repel(data = spps_score_group, 
-                  aes(x = NMDS1, y = NMDS2, label = Species, color = taxa), 
-                  size = 4, fontface = "bold", box.padding = 0.3, max.overlaps = 20)+
-  scale_color_manual(name = "Taxa", values = okabe) +  # Apply custom colors
-  
-  # Equal aspect ratio for NMDS
-  coord_fixed() +
-  
- # Theme and labels
+# Create NMDS plot
+sil.nmds.plot<-ggplot() +
+  geom_point(data = nmds_scores, aes(x = NMDS1, y = NMDS2, size = RW_cover, color = Region, alpha = 0.5)) +
+  geom_segment(data = species_scores, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black") +
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species), fontface = "bold") +
   mdthemes::md_theme_classic() + theme(plot.margin = unit(c(6,0,6,0), "pt"))+
-  labs(title = "*S. compressa*", x = "NMDS1", y = "NMDS2")
+  labs(title = "*S. compressa*", x = "NMDS1", y = "NMDS2") +
+  scale_color_manual(values = c("CA Central" = "darkorange", "CA South" = "magenta"), name = "Region") +
+  guides(size = guide_legend(title = "Rockweed Cover"), color = guide_legend(title = "Georegion"))+guides(alpha = "none")
 
-#pdf("sil.nmds.NEW.pdf")
+
+pdf("sil.nmds.NEW.unfilt.pdf")
 sil.nmds.plot
-#dev.off()
+dev.off()
 
-## Do for Fucus
-# run nmds
-nmds_fuc <- metaMDS(comm = fuc_diff_plot_w[ , 12:38],  # Define the community data 
+## do for Fuc 
+##
+
+# Select only species cover columns (columns 11-21)
+species_data <- fuc_diff_filt_w[, 11:24]
+
+# Perform NMDS
+nmds_fuc <- metaMDS(comm = fuc_diff_filt_w[ , 11:24],  # Define the community data 
                     distance = "bray",       # Specify a bray-curtis distance
                     try = 100)               # Number of iterations
 
+#get 'stress', lower is better (<0.05 means good data representation)
+nmds_fuc$stress 
+
+# Get NMDS coordinates
 #extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
-fuc.scores = as.data.frame(scores(nmds_fuc)$sites)
+nmds_scores = as.data.frame(scores(nmds_fuc)$sites)
 
 #add columns to data frame 
-fuc.scores$RW_cover = fuc_diff_plot_w$top_cov
-fuc.scores$Year = fuc_diff_plot_w$marine_common_year
-fuc.scores$Site = fuc_diff_plot_w$marine_site_name
+nmds_scores$RW_cover = fuc_diff_filt_w$top_cov
+nmds_scores$Region = fuc_diff_filt_w$georegion
+nmds_scores$Site = fuc_diff_filt_w$marine_site_name
 
-### Do spp and env fits
-fuc <-fuc_diff_plot_w[ , 12:38]
-fuc.env <- fuc.scores[, c("RW_cover", "Site")]
+# Fit species vectors
+species_fit <- envfit(nmds_fuc, species_data)
 
-fuc.spp.fit <- envfit(nmds_fuc, fuc, permutations = 999) # this fits species vectors
-fuc.envfit <- envfit(nmds_fuc, fuc.env, permutations = 999)
+species_scores <- as.data.frame(scores(species_fit, display = "vectors"))
+species_scores$species <- rownames(species_scores)
 
-### make env dataset
-env.scores <- as.data.frame(scores(fuc.envfit, display = "vectors")) #extracts relevant scores from envifit
-env.scores <- cbind(env.scores, env.variables = rownames(env.scores)) #and then gives them their names
-
-env.scores <- cbind(env.scores, pval = fuc.envfit$vectors$pvals) # add pvalues to dataframe
-sig.env.scrs <- subset(env.scores, pval<=0.05) #subset data to show variables significant at 0.05
-
-### make spp dataset
-ord <- metaMDS(fuc)
-ord
-
-species.scores <- as.data.frame(scores(ord, "species"))
-species.scores$Species <- rownames(species.scores)
-
-# Merge species scores with taxa information
-botgroup <-bot_spp_groups %>% remove_rownames %>% column_to_rownames(var="species")
-spps_score_group <- merge(species.scores, botgroup, by = "row.names")  # Ensure correct merge key
-
-# Extract NMDS site and species scores
-site.scores <- as.data.frame(scores(ord, "sites"))
-site.scores$Site <- rownames(site.scores)
-
-species.scores <- as.data.frame(scores(ord, "species"))
-species.scores$Species <- rownames(species.scores)
-
-# Merge species scores with taxa information
-spps_score_group <- merge(species.scores, botgroup, by = "row.names") 
-
-# Define custom taxa colors
-okabe <- c("tan4", "mediumseagreen","purple4", "darkolivegreen", "red3", "grey30" )
-names(okabe) <- sort(unique(bot_spp_groups$taxa))  # Assign colors to taxa names
-
-# Add RW_cover to site scores
-site.scores$RW_cover <- fuc.env$RW_cover
-
-# Generate contour data for RW_cover using kde2d
-kde <- with(site.scores, MASS::kde2d(NMDS1, NMDS2, h = c(0.5, 0.5), n = 100))  # Adjust 'h' for smoothing
-contour_data <- data.frame(expand.grid(x = kde$x, y = kde$y), z = as.vector(kde$z))
-
-# Generate plot
-# Plot NMDS with ggplot
-fuc.nmds.plot <- ggplot() +
-  # Contour lines for RW_cover
-  geom_contour_filled(data = contour_data, aes(x = x, y = y, z = z), alpha = 0.5) +
-  scale_fill_viridis_d(name = "RW Cover", option = "plasma", direction = -1) + # Plasma color scale for contours
-  
-  # Add NMDS site points (grey, with transparency)
-  geom_point(data = site.scores, aes(x = NMDS1, y = NMDS2), color = "grey", alpha = 0.6, size = 3) +
-  
-  # New color scale for taxa
-  ggnewscale::new_scale_color() +
-  
-  # Add species labels (bold & colored by taxa)
-  geom_text_repel(data = spps_score_group, 
-                  aes(x = NMDS1, y = NMDS2, label = Species, color = taxa), 
-                  size = 4, fontface = "bold", box.padding = 0.3, max.overlaps = 20)+
-  scale_color_manual(name = "Taxa", values = okabe) +  # Apply custom colors
-  
-  # Equal aspect ratio for NMDS
-  coord_fixed() +
-  
-  # Theme and labels
+# Create NMDS plot
+fuc.nmds.plot<-ggplot() +
+  geom_point(data = nmds_scores, aes(x = NMDS1, y = NMDS2, size = RW_cover, color = Region, alpha = 0.5)) +
+  geom_segment(data = species_scores, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black") +
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species), fontface = "bold") +
   mdthemes::md_theme_classic() + theme(plot.margin = unit(c(6,0,6,0), "pt"))+
-  labs(title = "*F. gardneri*", x = "NMDS1", y = "NMDS2")
+  labs(title = "*F. distichus*", x = "NMDS1", y = "NMDS2") +
+  scale_color_manual(values = c("CA Central" = "darkorange", "CA North" = "lightseagreen"), name = "Region") +
+  guides(size = guide_legend(title = "Rockweed Cover"), color = guide_legend(title = "Georegion"))+guides(alpha = "none")
 
-#pdf("fuc.nmds.NEW.pdf")
+
+pdf("fuc.nmds.NEW.unfilt.pdf")
 fuc.nmds.plot
-#dev.off()
+dev.off()
 
 
-### Do for Pellim
+### do for pellim
+##
 
 
-# run nmds
-nmds_pel <- metaMDS(comm = pel_diff_plot_w[ , 12:28],  # Define the community data 
+# Select only species cover columns (columns 11-21)
+species_data <- pel_diff_filt_w[, 11:19]
+
+# Perform NMDS
+nmds_pel <- metaMDS(comm = pel_diff_filt_w[ , 11:19],  # Define the community data 
                     distance = "bray",       # Specify a bray-curtis distance
                     try = 100)               # Number of iterations
 
+#get 'stress', lower is better (<0.05 means good data representation)
+nmds_pel$stress 
+
+# Get NMDS coordinates
 #extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
-pel.scores = as.data.frame(scores(nmds_pel)$sites)
+nmds_scores = as.data.frame(scores(nmds_pel)$sites)
 
 #add columns to data frame 
-pel.scores$RW_cover = pel_diff_plot_w$top_cov
-pel.scores$Year = pel_diff_plot_w$marine_common_year
-pel.scores$Site = pel_diff_plot_w$marine_site_name
+nmds_scores$RW_cover = pel_diff_filt_w$top_cov
+nmds_scores$Region = pel_diff_filt_w$georegion
+nmds_scores$Site = pel_diff_filt_w$marine_site_name
 
-### Do spp and env fits
-pel <-pel_diff_plot_w[ , 12:28]
-pel.env <- pel.scores[, c("RW_cover", "Site")]
+# Fit species vectors
+species_fit <- envfit(nmds_pel, species_data)
 
-pel.spp.fit <- envfit(nmds_pel, pel, permutations = 999) # this fits species vectors
-pel.envfit <- envfit(nmds_pel, pel.env, permutations = 999)
+species_scores <- as.data.frame(scores(species_fit, display = "vectors"))
+species_scores$species <- rownames(species_scores)
 
-### make env dataset
-env.scores <- as.data.frame(scores(pel.envfit, display = "vectors")) #extracts relevant scores from envifit
-env.scores <- cbind(env.scores, env.variables = rownames(env.scores)) #and then gives them their names
-
-env.scores <- cbind(env.scores, pval = fuc.envfit$vectors$pvals) # add pvalues to dataframe
-sig.env.scrs <- subset(env.scores, pval<=0.05) #subset data to show variables significant at 0.05
-
-### make spp dataset
-ord <- metaMDS(pel)
-ord
-
-species.scores <- as.data.frame(scores(ord, "species"))
-species.scores$Species <- rownames(species.scores)
-
-# Merge species scores with taxa information
-botgroup <-bot_spp_groups %>% remove_rownames %>% column_to_rownames(var="species")
-spps_score_group <- merge(species.scores, botgroup, by = "row.names")  # Ensure correct merge key
-
-# Extract NMDS site and species scores
-site.scores <- as.data.frame(scores(ord, "sites"))
-site.scores$Site <- rownames(site.scores)
-
-species.scores <- as.data.frame(scores(ord, "species"))
-species.scores$Species <- rownames(species.scores)
-
-# Merge species scores with taxa information
-spps_score_group <- merge(species.scores, botgroup, by = "row.names") 
-
-# Define custom taxa colors
-okabe <- c("tan4", "mediumseagreen","purple4", "darkolivegreen", "red3", "grey30" )
-names(okabe) <- sort(unique(bot_spp_groups$taxa))  # Assign colors to taxa names
-
-# Add RW_cover to site scores
-site.scores$RW_cover <- pel.env$RW_cover
-
-# Generate contour data for RW_cover using kde2d
-kde <- with(site.scores, MASS::kde2d(NMDS1, NMDS2, h = c(0.5, 0.5), n = 100))  # Adjust 'h' for smoothing
-contour_data <- data.frame(expand.grid(x = kde$x, y = kde$y), z = as.vector(kde$z))
-
-# Generate plot
-# Plot NMDS with ggplot
-pel.nmds.plot <- ggplot() +
-  # Contour lines for RW_cover
-  geom_contour_filled(data = contour_data, aes(x = x, y = y, z = z), alpha = 0.5) +
-  scale_fill_viridis_d(name = "RW Cover", option = "plasma", direction = -1) + # Plasma color scale for contours
-  
-  # Add NMDS site points (grey, with transparency)
-  geom_point(data = site.scores, aes(x = NMDS1, y = NMDS2), color = "grey", alpha = 0.6, size = 3) +
-  
-  # New color scale for taxa
-  ggnewscale::new_scale_color() +
-  
-  # Add species labels (bold & colored by taxa)
-  geom_text_repel(data = spps_score_group, 
-                  aes(x = NMDS1, y = NMDS2, label = Species, color = taxa), 
-                  size = 4, fontface = "bold", box.padding = 0.3, max.overlaps = 20)+
-  scale_color_manual(name = "Taxa", values = okabe) +  # Apply custom colors
-  
-  # Equal aspect ratio for NMDS
-  coord_fixed() +
-  
-  # Theme and labels
+# Create NMDS plot
+pel.nmds.plot<-ggplot() +
+  geom_point(data = nmds_scores, aes(x = NMDS1, y = NMDS2, size = RW_cover, color = Region, alpha = 0.5)) +
+  geom_segment(data = species_scores, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black") +
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species), fontface = "bold") +
   mdthemes::md_theme_classic() + theme(plot.margin = unit(c(6,0,6,0), "pt"))+
-  labs(title = "*P. limitata*", x = "NMDS1", y = "NMDS2")
+  labs(title = "*P. limitata*", x = "NMDS1", y = "NMDS2") +
+  scale_color_manual(values = c("CA Central" = "darkorange", "CA North" = "lightseagreen"), name = "Region") +
+  guides(size = guide_legend(title = "Rockweed Cover"), color = guide_legend(title = "Georegion"))+guides(alpha = "none")
 
-#pdf("pel.nmds.NEW.pdf")
+
+pdf("pel.nmds.NEW.unfilt.pdf")
 pel.nmds.plot
-#dev.off()
+dev.off()
 
-## Combine into a single plot for all 3 spp
+
+## combine into single plot
 
 library(cowplot)
 
+# Extract legends
+legend1 <- get_legend(sil.nmds.plot + theme(legend.position="right"))
+legend2 <- get_legend(fuc.nmds.plot + theme(legend.position="right"))
+
+# Combine legends into one grid
+combined_legend <- plot_grid(legend1, legend2, ncol = 1)
+
 # arrange the three plots in a single row
 prow <- plot_grid( sil.nmds.plot + theme(legend.position="none"),
-           fuc.nmds.plot + theme(legend.position="none"),
-           pel.nmds.plot + theme(legend.position="none"),
-           align = 'vh',
-           labels = c("a)", "b)", "c)"),
-           hjust = -1,
-           nrow = 1
-           )
+                   fuc.nmds.plot + theme(legend.position="none"),
+                   pel.nmds.plot + theme(legend.position="none"),
+                   align = 'vh',
+                   labels = c("a)", "b)", "c)"),
+                   hjust = -1,
+                   nrow = 1
+)
 
-legend <- get_legend(sil.nmds.plot + theme(legend.position="right"))
+final_plot <- plot_grid(prow, combined_legend, ncol = 1, rel_heights = c(3, 1))
+final_plot
 
-p <- plot_grid( prow, ncol = 1)
-p
+save_plot("combined.nmds.legend.pdf", final_plot, base_width = 15, base_height = 7)
 
-save_plot("combined.nmds.pdf", p, base_width = 15, base_height = 7)
 
-l <- plot_grid(legend, ncol = 1)
-
-save_plot("comb.nmds.legend.pdf", l, base_height = 7)
